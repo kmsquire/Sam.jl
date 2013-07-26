@@ -3,7 +3,9 @@ module BGZip
 using StrPack
 using Zlib
 
-import Base: read, readuntil, readline, readall, nb_available, eof
+import Base: read, readuntil, readline, readall, nb_available, eof, open, close
+
+export read, readuntil, readline, readall, nb_available, eof, close
 
 
 const FTEXT    = 0b00000001
@@ -91,6 +93,7 @@ type GZStream <: IO
     header::GZipHeader
     io::IO
     buffer::IOBuffer
+
     readsize::Int
     rawbuf::Array{Uint8}
 end
@@ -116,7 +119,7 @@ function open(fname::String, mode::String="r", readsize = 65536)
     ## Read in the header and return a GZStream
 
     header = read(io, GZipHeader)
-    GZStream(header, io, IOBuffer(), readsize, Uint8[])
+    GZStream(header, io, PipeBuffer(), readsize, Uint8[])
 end
 
 
@@ -159,42 +162,38 @@ end
 
 eof(s::GZStream) = eof(s.buffer) && eof(s.io)
 
+close(s::GZStream) = (close(s.io); close(s.buffer))
+
+function read_decompress(x::GZStream, nb::Int)
+    resize!(x.rawbuf, nb)
+    read(x.io, x.rawbuf)
+
+    sz = length(x.buffer.data)
+    decompress(x.rawbuf, true, x.buffer.data)
+    x.buffer.size += length(x.buffer.data) - sz
+end
+
 
 function wait_readnb(x::GZStream, nb::Int)
     while !eof(x.io) && (nba = nb_available(x.buffer)) < nb
         bytes_to_read = max((nb-nba), min(x.readsize, nb_available(x.io)))
-        resize!(x.rawbuf, bytes_to_read)
-        read(x.io, x.rawbuf)
-        # TODO: make a version which decompresses directly to an IOBuffer
-        data = decompress(x.rawbuf, true)
-        append!(x.buffer.data, data)
-        x.buffer.size += length(data)
+        read_decompress(x, bytes_to_read)
     end
 end
 
 function wait_readbyte(x::GZStream, c::Uint8)
     while !eof(x.io) && search(x.buffer,c) <= 0
         bytes_to_read = min(x.readsize, nb_available(x.io))
-        resize!(x.rawbuf, bytes_to_read)
-        read(x.io, x.rawbuf)
-
-        data = decompress(x.rawbuf, true)
-        append!(x.buffer.data, data)
-        x.buffer.size += length(data)
+        read_decompress(x, bytes_to_read)
     end
 end
 
 wait_readline(x) = wait_readbyte(x, uint8('\n'))
 
-function wait_readall(x::GZStream, nb::Int)
+function wait_readall(x::GZStream)
     while !eof(x.io)
         bytes_to_read = min(x.readsize, nb_available(x.io))
-        resize!(x.rawbuf, bytes_to_read)
-        read(x.io, x.rawbuf)
-        # TODO: make a version which decompresses directly to an IOBuffer
-        data = decompress(x.rawbuf, true)
-        append!(x.buffer.data, data)
-        x.buffer.size += length(data)
+        read_decompress(x, bytes_to_read)
     end
 end
 

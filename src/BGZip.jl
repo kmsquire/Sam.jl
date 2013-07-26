@@ -3,7 +3,7 @@ module BGZip
 using StrPack
 using Zlib
 
-import Base: read, readuntil, readline, readall, nb_available, eof, open, close
+import Base: read, readuntil, readline, readall, nb_available, eof, close
 
 export read, readuntil, readline, readall, nb_available, eof, close
 
@@ -169,7 +169,7 @@ function read_decompress(x::GZStream, nb::Int)
     read(x.io, x.rawbuf)
 
     sz = length(x.buffer.data)
-    decompress(x.rawbuf, true, x.buffer.data)
+    decompress(x.rawbuf, true, Zlib.CHUNKSIZE, x.buffer.data, true)
     x.buffer.size += length(x.buffer.data) - sz
 end
 

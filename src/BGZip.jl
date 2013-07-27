@@ -3,6 +3,8 @@ module BGZip
 using StrPack
 using Zlib
 
+require(joinpath(Pkg2.Dir.path("Zlib"), "src", "ZStream.jl"))
+
 import Base: read, readuntil, readline, readall, nb_available, eof, close
 
 export read, readuntil, readline, readall, nb_available, eof, close
@@ -90,18 +92,29 @@ end
 ###
 
 type GZStream <: IO
-    header::GZipHeader
     io::IO
     buffer::IOBuffer
 
-    readsize::Int
+    header::GZipHeader
+    strm::ZStream
+
+    chunksize::Int
     rawbuf::Array{Uint8}
 end
+
+function GZStream(io::IO, chunksize::Int=Zlib.CHUNKSIZE)
+    header = read(io, GZipHeader)
+    rawbuf = Array(Uint8, chunksize)
+    stream = ZStream(rawbuf, Array(Uint8, 0); raw=true, append=true, chunksize=chunksize)
+
+    GZStream(io, PipeBuffer(), header, stream, chunksize, rawbuf)
+end
+
 
 nb_available(io::GZStream) = nb_available(io.buffer)
 
 
-function open(fname::String, mode::String="r", readsize = 65536)
+function open(fname::String, mode::String="r", chunksize = 65536)
     io = Base.open(fname, mode)
 
     # Only handle read-only streams for now
@@ -118,8 +131,7 @@ function open(fname::String, mode::String="r", readsize = 65536)
 
     ## Read in the header and return a GZStream
 
-    header = read(io, GZipHeader)
-    GZStream(header, io, PipeBuffer(), readsize, Uint8[])
+    GZStream(io, chunksize)
 end
 
 
@@ -164,36 +176,41 @@ eof(s::GZStream) = eof(s.buffer) && eof(s.io)
 
 close(s::GZStream) = (close(s.io); close(s.buffer))
 
-function read_decompress(x::GZStream, nb::Int)
-    resize!(x.rawbuf, nb)
-    read(x.io, x.rawbuf)
+# TODO: turn these into true async calls
 
-    sz = length(x.buffer.data)
-    decompress(x.rawbuf, true, Zlib.CHUNKSIZE, x.buffer.data, true)
-    x.buffer.size += length(x.buffer.data) - sz
+function read_decompress(x::GZStream)
+    if nb_available_in(x.strm) == 0
+        n = min(nb_available(x.io), x.chunksize, 1)
+        resize!(x.rawbuf, n)
+        read(x.io, x.rawbuf)
+        set_input(x.strm, x.rawbuf)
+    end
+    # TODO: eof doesn't work well for streams
+    ret = decompress_next(x.strm)
 end
 
 
 function wait_readnb(x::GZStream, nb::Int)
-    while !eof(x.io) && (nba = nb_available(x.buffer)) < nb
-        bytes_to_read = max((nb-nba), min(x.readsize, nb_available(x.io)))
-        read_decompress(x, bytes_to_read)
+    # TODO: eof doesn't work well for streams
+    while !eof(x.io) && nb_available(x.buffer) < nb
+        read_decompress(x)
     end
 end
 
+
 function wait_readbyte(x::GZStream, c::Uint8)
+    # TODO: eof doesn't work well for streams
     while !eof(x.io) && search(x.buffer,c) <= 0
-        bytes_to_read = min(x.readsize, nb_available(x.io))
-        read_decompress(x, bytes_to_read)
+        read_decompress(x)
     end
 end
 
 wait_readline(x) = wait_readbyte(x, uint8('\n'))
 
 function wait_readall(x::GZStream)
+    # TODO: eof doesn't work well for streams
     while !eof(x.io)
-        bytes_to_read = min(x.readsize, nb_available(x.io))
-        read_decompress(x, bytes_to_read)
+        read_decompress(x)
     end
 end
 

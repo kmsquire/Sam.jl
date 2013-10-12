@@ -1,11 +1,11 @@
 module BGZip
 
 using StrPack
-using Zlib
+import Zlib
 
-import Base: read, readuntil, readline, readall, nb_available, eof, open, close
+import Base: read, eof, close #, nb_available
 
-export read, readuntil, readline, readall, nb_available, eof, close
+export read, nb_available, eof, close
 
 
 const FTEXT    = 0b00000001
@@ -74,9 +74,9 @@ function read(io::IO, ::Type{GZipHeader})
 
     if header.FLG & FEXTRA > 0
         xlen = read(io, Uint16)
-        extra_buffer = IOBuffer(read(io, Uint8[XLEN]))
+        extra_buffer = IOBuffer(read(io, Array(Uint8,xlen)))
         while !eof(extra_buffer)
-            push(extra, read(extra_buffer, GZipExtra))
+            push!(extra, read(extra_buffer, GZipExtra))
         end
     end
 
@@ -92,16 +92,12 @@ end
 type GZStream <: IO
     header::GZipHeader
     io::IO
-    buffer::IOBuffer
-
-    readsize::Int
-    rawbuf::Array{Uint8}
 end
 
-nb_available(io::GZStream) = nb_available(io.buffer)
+#nb_available(io::GZStream) = nb_available(io.io)
 
 
-function open(fname::String, mode::String="r", readsize = 65536)
+function open(fname::String, mode::String="r")
     io = Base.open(fname, mode)
 
     # Only handle read-only streams for now
@@ -119,82 +115,16 @@ function open(fname::String, mode::String="r", readsize = 65536)
     ## Read in the header and return a GZStream
 
     header = read(io, GZipHeader)
-    GZStream(header, io, PipeBuffer(), readsize, Uint8[])
+    GZStream(header, Zlib.Reader(io))
 end
 
+read(this::GZStream, ::Type{Uint8}) = Base.read(this.io, x)
+read(this::GZStream, x::Array) = Base.read(this.io, x)
+read(this::GZStream, x::BitArray) = Base.read(this.io, x)
+read(this::GZStream, x::AbstractArray) = Base.read(this.io, x)
 
-function read(this::GZStream, ::Type{Uint8})
-    buf = this.buffer
-    wait_readnb(this, 1)
-    read(buf, Uint8)
-end
+eof(s::GZStream) = eof(s.io)
 
-
-function read{T}(this::GZStream, a::Array{T})
-    assert(isbits(T),"Read from Buffer only supports bits types or arrays of bits types")
-    nb = length(a)*sizeof(T)
-    buf = this.buffer
-    @assert buf.seekable == false
-    @assert buf.maxsize >= nb
-    wait_readnb(this,nb)
-    read(buf, a)
-    return a
-end
-
-function readline(this::GZStream)
-    wait_readline(this)
-    readline(this.buffer)
-end
-
-function readuntil(this::GZStream,c::Uint8)
-    buf = this.buffer
-    @assert buf.seekable == false
-    wait_readbyte(this,c)
-    readuntil(buf,c)
-end
-
-function readall(this::GZStream)
-    buf = this.buffer
-    @assert buf.seekable == false
-    wait_readall(this)
-    takebuf_string(this.buffer)
-end
-
-eof(s::GZStream) = eof(s.buffer) && eof(s.io)
-
-close(s::GZStream) = (close(s.io); close(s.buffer))
-
-function read_decompress(x::GZStream, nb::Int)
-    resize!(x.rawbuf, nb)
-    read(x.io, x.rawbuf)
-
-    sz = length(x.buffer.data)
-    decompress(x.rawbuf, true, x.buffer.data)
-    x.buffer.size += length(x.buffer.data) - sz
-end
-
-
-function wait_readnb(x::GZStream, nb::Int)
-    while !eof(x.io) && (nba = nb_available(x.buffer)) < nb
-        bytes_to_read = max((nb-nba), min(x.readsize, nb_available(x.io)))
-        read_decompress(x, bytes_to_read)
-    end
-end
-
-function wait_readbyte(x::GZStream, c::Uint8)
-    while !eof(x.io) && search(x.buffer,c) <= 0
-        bytes_to_read = min(x.readsize, nb_available(x.io))
-        read_decompress(x, bytes_to_read)
-    end
-end
-
-wait_readline(x) = wait_readbyte(x, uint8('\n'))
-
-function wait_readall(x::GZStream)
-    while !eof(x.io)
-        bytes_to_read = min(x.readsize, nb_available(x.io))
-        read_decompress(x, bytes_to_read)
-    end
-end
+close(s::GZStream) = close(s.io)
 
 end

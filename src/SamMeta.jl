@@ -1,6 +1,6 @@
 # SamMeta.jl
 
-using OrderedCollections
+using DataStructures
 import Base: push!, readline, close, eof, isequal
 
 

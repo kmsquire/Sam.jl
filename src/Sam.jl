@@ -65,7 +65,7 @@ end
 
 function push!(sm::SamHeaderData, kv::Tuple{AbstractString, Any})
     (tag, value) = kv
-    if has(sm, tag)
+    if tag in keys(sm)
         push!(sm[tag], value)
     else
         sm[tag] = [value]
@@ -379,7 +379,7 @@ function read_meta(io::IO; ftype="bam")
         refs = read_bam_refs(io)
 
         # Make sure refs match
-        if has(header, "SQ")
+        if "SQ" in keys(header)
             header_refs = get_header_refs(header)
             if length(header_refs) != length(refs)
                 error("Different number of reference sequences in header and ref list... what happened?!")

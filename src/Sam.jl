@@ -114,7 +114,7 @@ function parse_headerlines{S <: AbstractString}(headerlines::Vector{S})
 end
 
 function compose_headerlines(header::SamHeaderData)
-    headerlines = String[]
+    headerlines = AbstractString[]
     for (linetag, tds) in header
         for td in tds
             push!(headerlines, compose_headerline(linetag, td))
@@ -245,11 +245,19 @@ function read_bam_header(io::IO)
     #read(io, Array(UInt8,4)) == BAM_magic || error("Not a bam file.")
 
     # Read header
-    header = read_raw_bam_header(io) | bytestring | rstrip | x->split(x,"\n") | parse_headerlines
+    # Use pipeline() instead of | or deprecated |>
+
+    tmp_header = read_raw_bam_header(io)
+    headerlines = AbstractString[]
+    headers = bytestring(tmp_header)
+    push!(headerlines, rstrip(headers))
+    for line in headerlines
+      parse_headerlines(line)
+    end
 end
 
 function write_bam_header(io::IO, header::SamHeaderData)
-    header = [h*"\n" for h in compose_headerlines(header)] | join
+    header = pipeline([h*"\n" for h in compose_headerlines(header)], join)
     write_raw_bam_header(io, header.data)
 end
 

@@ -412,17 +412,16 @@ function samopen(io::GZipStream, mode="r"; meta=nothing)
         end
         if splitext(io.name)[2] == ".bam"
             bam = BamFile(io, meta)
-
         else
-            #Initialize writeable same
+            #TODO Initialize writeable same
         end
     else
         error("mode must be \"w\" or \"r\"")
     end
 end
 
-samopen(fn::AbstractString, mode="r"; header=nothing, refs=nothing) = samopen(GZip.open(fn, mode), mode, header=header, refs=refs)
-samopen(io::IOStream, mode="r"; header=nothing, refs=nothing) = samopen(GZip.gzdopen(fd(io)), mode, header=header, refs=refs)
+samopen(fn::AbstractString, mode="r"; meta=nothing) = samopen(GZip.open(fn, mode), mode, meta=meta)
+samopen(io::IOStream, mode="r"; meta=nothing) = samopen(GZip.gzdopen(fd(io)), mode, meta=meta)
 const open = samopen
 
 function samopen(f::Function, args...)

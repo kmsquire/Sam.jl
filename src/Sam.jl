@@ -309,7 +309,9 @@ function read_bam_refs(io::IO)
 
     for i = 1:n_ref
         l_name = read(io, Int32)
-        name = rstrip(bytestring(read(io, Array(UInt8,l_name))),"\0")
+        # name is \0 terminated, we need to remove it
+        # for some reason, rstrip doesn't want to work.
+        name = replace(bytestring(read(io, Array(UInt8,l_name))), r"\0", "")
         l_ref = read(io, Int32)
         push!(refs, RefSeq(name, l_ref))
     end
@@ -331,7 +333,7 @@ function read_alignment(b::BamFile)
     blocksize = read(b.io, UInt32)
     info = unpack(b.io, AlignmentInfo, strpack_asize, align_packed, :LittleEndian)
 
-    readname = rstrip(bytestring(read(b.io, Array(UInt8, info.l_readname))), "\0")
+    readname = replace(bytestring(read(b.io, Array(UInt8, info.l_readname))), r"\0", "")
     cigar = read(b.io, Array(UInt32, info.n_cigar_op))
     seq = read(b.io, Array(UInt8, (info.rlen+1)>>1))
     qual = read(b.io, Array(UInt8, info.rlen))

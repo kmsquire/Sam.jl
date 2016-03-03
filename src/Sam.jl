@@ -108,7 +108,7 @@ end
 function parse_headerlines{S <: AbstractString}(headerlines::Vector{S})
     header = SamHeaderData()
     for line in headerlines
-        push!(header, parse_header_line(line))
+        push!(header, parse_headerline(line))
     end
     header
 end

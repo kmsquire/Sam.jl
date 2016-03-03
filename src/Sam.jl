@@ -359,50 +359,64 @@ end
 
 get_header_refs(header::SamHeaderData) = [RefSeq(s["SN"], s["LN"]) for s in header["SQ"]]
 
-function read_meta(io::IO)
-    header = read_bam_header(io)
-    if first(header)[1] != "HD"
-        error("read_meta: header does not start with HD line")
-    end
-
-    refs = read_bam_refs(io)
-
-    # Make sure refs match
-    if has(header, "SQ")
-        header_refs = get_header_refs(header)
-        if length(header_refs) != length(refs)
-            error("Different number of reference sequences in header and ref list... what happened?!")
-        elseif any(header_refs .!= refs)
-            pos = find(header_refs .!= refs)
-            error("""Reference sequence mismatch between header and ref list at position(s) $pos:
-                  header:
-                     $([pos header_refs[pos]])
-                  ref list:
-                     $([pos refs[pos]])
-                  """ )
+function read_meta(io::IO; ftype="bam")
+    if ftype != "bam" && ftype != "sam"
+        # Throw error, if neither BAM or SAM is provided
+        error("ftype needs to be provided as sam or bam only!")
+    elseif ftype == "bam"
+        # Here we'll take care of BAM files
+        header = read_bam_header(io)
+        if first(header)[1] != "HD"
+            error("read_meta: header does not start with HD line")
         end
+
+        refs = read_bam_refs(io)
+
+        # Make sure refs match
+        if has(header, "SQ")
+            header_refs = get_header_refs(header)
+            if length(header_refs) != length(refs)
+                error("Different number of reference sequences in header and ref list... what happened?!")
+            elseif any(header_refs .!= refs)
+                pos = find(header_refs .!= refs)
+                error("""Reference sequence mismatch between header and ref list at position(s) $pos:
+                      header:
+                         $([pos header_refs[pos]])
+                      ref list:
+                         $([pos refs[pos]])
+                      """ )
+            end
+        end
+    else
+        # This is the case for SAM files
+        header = read_sam_header(io)
+        if first(header)[1] != "HD"
+            error("read_meta: header does not start with HD line")
+        end
+
+        refs = get_header_refs(header)
     end
     return SamMeta(header, refs)
 end
 
-function read_meta(io::IO)
-    header = read_sam_header(io)
-    if first(header)[1] != "HD"
-        error("read_meta: header does not start with HD line")
-    end
-
-    refs = get_header_refs(header)
-    return SamMeta(header, refs)
-end
+# function read_meta(io::IO)
+#     header = read_sam_header(io)
+#     if first(header)[1] != "HD"
+#         error("read_meta: header does not start with HD line")
+#     end
+#
+#     refs = get_header_refs(header)
+#     return SamMeta(header, refs)
+# end
 
 
 function samopen(io::GZipStream, mode="r"; meta=nothing)
     if mode == "r"
         magic = read(io, Array(UInt8, 4))
         if magic == BAM_MAGIC.data
-            BamFile(io, read_meta(io))
+            BamFile(io, read_meta(io, ftype="bam"))
         elseif magic == SAM_MAGIC.data
-            SamFile(io, read_meta(io))
+            SamFile(io, read_meta(io, ftype="sam"))
         else
             error("File does not seem to be a sam or bam file")
         end

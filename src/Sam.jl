@@ -88,7 +88,7 @@ const SAM_MAGIC = "@HD\t"
 function parse_headerline(line::AbstractString)
     linetag = line[2:3]
     tagdict = OrderedDict{AbstractString, AbstractString}()
-    for kv in split(str, "\t")
+    for kv in split(line, "\t")
         k = kv[1:2]
         v = kv[4:end]
         tagdict[k] = v

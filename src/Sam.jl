@@ -251,9 +251,7 @@ function read_bam_header(io::IO)
     headerlines = AbstractString[]
     headers = bytestring(tmp_header)
     push!(headerlines, rstrip(headers))
-    for line in headerlines
-      parse_headerlines(line)
-    end
+    parse_headerlines(headerlines)
 end
 
 function write_bam_header(io::IO, header::SamHeaderData)

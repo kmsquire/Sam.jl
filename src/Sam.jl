@@ -334,9 +334,9 @@ function read_alignment(b::BamFile)
     info = unpack(b.io, AlignmentInfo, strpack_asize, align_packed, :LittleEndian)
 
     readname = replace(bytestring(read(b.io, Array(UInt8, info.l_readname))), r"\0", "")
-    cigar = read(b.io, Array(UInt32, info.n_cigar_op))
-    seq = read(b.io, Array(UInt8, (info.rlen+1)>>1))
-    qual = read(b.io, Array(UInt8, info.rlen))
+    enc_c = read(b.io, Array(UInt32, info.n_cigar_op))
+    enc_s = read(b.io, Array(UInt8, (info.rlen+1)>>1))
+    enc_q = read(b.io, Array(UInt8, info.rlen))
 
     bytesread = ainfo_size +
                 info.l_readname +
@@ -345,8 +345,23 @@ function read_alignment(b::BamFile)
                 info.rlen
     # TODO: parse
     aux = read(b.io, Array(UInt8, blocksize-bytesread))
+    cigar = parseCigar(enc_c)
+    seq = parseSeq(enc_s)
+    qual = parseQual(enc_q)
 
     BamAlignment(info, readname, cigar, seq, qual, aux)
+end
+
+function parseCigar(c::Array{UInt32})
+  return c
+end
+
+function parseSeq(s::Array{UInt8})
+  return s
+end
+
+function parseQual(q::Array{UInt8})
+  return q
 end
 
 function write_alignment(b::BamFile, r::BamAlignment)
